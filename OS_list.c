@@ -94,19 +94,19 @@ void list_destroy(List listHeadL){
 static Node get_prev_node_to_element(Node listHead, int key){
 	assert(listHead);
 	//lock listHead:
-	pthread_mutex_lock(&(listHead->listMutex));
+	assert(pthread_mutex_lock(&(listHead->listMutex)) == 0);
 	Node prev = listHead; 
 	Node curr = listHead->next;
 	while(curr){
 		//lock curr:
-		pthread_mutex_lock(&(curr->listMutex));
+		assert(pthread_mutex_lock(&(curr->listMutex)) == 0);
 		if(curr->key == key){
 			//unlock curr:
-			pthread_mutex_unlock(&(curr->listMutex));
+			assert(pthread_mutex_unlock(&(curr->listMutex)) == 0);
 			return prev;
 		}
 		//unlock prev:
-		pthread_mutex_unlock(&(prev->listMutex));
+		assert(pthread_mutex_unlock(&(prev->listMutex)) == 0);
 		prev = curr;
 		curr = prev->next;
 	}
@@ -123,20 +123,20 @@ int list_insert(List listHeadL, int key, Element val){
 	//if prev is NOT last - the element was found.
 	if(prev->next){
 		//unlock prev:
-		pthread_mutex_unlock(&(prev->listMutex));
+		assert(pthread_mutex_unlock(&(prev->listMutex)) == 0);
 		return 0;
 	}
 
 	Node newNode = node_create(key,val);
 	if(!newNode){
 		//unlock prev:
-		pthread_mutex_unlock(&(prev->listMutex));
+		assert(pthread_mutex_unlock(&(prev->listMutex)) == 0);
 		return -1;
 	}
 	newNode->next = prev->next;
 	prev->next = newNode;
 	//unlock prev:
-	pthread_mutex_unlock(&(prev->listMutex));
+	assert(pthread_mutex_unlock(&(prev->listMutex)) == 0);
 	return 1;
 }
 
@@ -150,18 +150,18 @@ int list_update(List listHeadL, int key, Element val){
 	//if prev is last - element wasnt found.
 	if(!prev->next){
 		//unlock prev:
-		pthread_mutex_unlock(&(prev->listMutex));
+		assert(pthread_mutex_unlock(&(prev->listMutex)) == 0);
 		return 0;
 	}
 	Node curr = prev->next;
 	assert(curr);
 	//lock curr:
-	pthread_mutex_lock(&(curr->listMutex));
+	assert(pthread_mutex_lock(&(curr->listMutex)) == 0);
 	curr->element = val;
 	//unlock prev:
-	pthread_mutex_unlock(&(prev->listMutex));
+	assert(pthread_mutex_unlock(&(prev->listMutex)) == 0);
 	//unlock curr:
-	pthread_mutex_unlock(&(curr->listMutex));
+	assert(pthread_mutex_unlock(&(curr->listMutex)) == 0);
 	return 1;
 }
 
@@ -175,18 +175,18 @@ int list_remove(List listHeadL, int key){
 	//if prev is last - element wasnt found.
 	if(!prev->next){
 		//unlock prev:
-		pthread_mutex_unlock(&(prev->listMutex));
+		assert(pthread_mutex_unlock(&(prev->listMutex)) == 0);
 		return 0;
 	}
 	Node curr = prev->next;
 	assert(curr);
 	//lock curr:
-	pthread_mutex_lock(&(curr->listMutex));
+	assert(pthread_mutex_lock(&(curr->listMutex)) == 0);
 	prev->next = curr->next;
 	//release prev:
-	pthread_mutex_unlock(&(prev->listMutex));
+	assert(pthread_mutex_unlock(&(prev->listMutex)) == 0);
 	//release curr (wont be reachable here):
-	pthread_mutex_unlock(&(curr->listMutex));
+	assert(pthread_mutex_unlock(&(curr->listMutex)) == 0);
 	node_destroy(curr);
 	return 1;	
 }
@@ -201,7 +201,7 @@ int list_contains(List listHeadL, int key){
 	//if prev is last - element wasnt found.
 	if(!prev->next){
 		//unlock prev:
-		pthread_mutex_unlock(&(prev->listMutex));
+		assert(pthread_mutex_unlock(&(prev->listMutex)) == 0);
 		return 0;
 	}
 
@@ -209,15 +209,15 @@ int list_contains(List listHeadL, int key){
 	int res = -1;
 	assert(curr);
 	//lock curr:
-	pthread_mutex_lock(&(curr->listMutex));
+	assert(pthread_mutex_lock(&(curr->listMutex)) == 0);
 	assert(curr->key == key);
 	if(curr->key == key){
 		res = 1;
 	}
 	//unlock curr:
-	pthread_mutex_unlock(&(curr->listMutex));
+	assert(pthread_mutex_unlock(&(curr->listMutex)) == 0);
 	//unlock prev:
-	pthread_mutex_unlock(&(prev->listMutex));
+	assert(pthread_mutex_unlock(&(prev->listMutex)) == 0);
 	return res;
 }
 
@@ -226,7 +226,7 @@ int list_size(List listHeadL){
 	CHECK_NULL_AND_RETURN_INVALID(listHead)
 	assert(listHead);
 	//lock listHead:
-	pthread_mutex_lock(&(listHead->listMutex));
+	assert(pthread_mutex_lock(&(listHead->listMutex)) == 0);
 
 	Node prev = listHead; 
 	Node curr = listHead->next; 
@@ -236,9 +236,9 @@ int list_size(List listHeadL){
 		curr = prev->next;
 		if(curr){
 			//lock curr:
-			pthread_mutex_lock(&(curr->listMutex));
+			assert(pthread_mutex_lock(&(curr->listMutex)) == 0);
 			//unlock prev:
-			pthread_mutex_unlock(&(prev->listMutex));
+			assert(pthread_mutex_unlock(&(prev->listMutex)) == 0);
 			prev = curr;
 			curr = prev->next;
 		}
@@ -246,7 +246,7 @@ int list_size(List listHeadL){
 	}
 
 	//unlock prev:
-	pthread_mutex_unlock(&(prev->listMutex));
+	assert(pthread_mutex_unlock(&(prev->listMutex)) == 0);
 	return counter;
 }
 
@@ -261,18 +261,18 @@ int compute_node(List listHeadL, int key, void *(*compute_func) (void *), void**
 	//if prev is last - element wasnt found.
 	if(!prev->next){
 		//unlock prev:
-		pthread_mutex_unlock(&(prev->listMutex));
+		assert(pthread_mutex_unlock(&(prev->listMutex)) == 0);
 		return 0;
 	}
 	Node curr = prev->next;
 	//lock curr:
-	pthread_mutex_lock(&(curr->listMutex));
+	assert(pthread_mutex_lock(&(curr->listMutex)) == 0);
 	//unlock prev:
-	pthread_mutex_unlock(&(prev->listMutex));
+	assert(pthread_mutex_unlock(&(prev->listMutex)) == 0);
 	//compute the element and result:
 	*result = compute_func(curr->element);
 	//unlock curr:
-	pthread_mutex_unlock(&(curr->listMutex));
+	assert(pthread_mutex_unlock(&(curr->listMutex)) == 0);
 	return 1; 
 }
 
@@ -283,6 +283,8 @@ Element get_element_from_list(List listHeadL, int key){
 	Node listHead = (Node)listHeadL;
 	CHECK_NULL_AND_RETURN_NULL(listHead)
 	listHead = get_prev_node_to_element(listHead,key);
+	//unlock listHead:
+	assert(pthread_mutex_unlock(&(listHead->listMutex)) == 0);
 	CHECK_NULL_AND_RETURN_NULL(listHead->next)
 	return listHead->next->element;
 }
