@@ -1,3 +1,5 @@
+#ifndef TEST_AUX_H
+#define TEST_AUX_H
 
 #define TEST_SUCCESS 1
 
@@ -23,3 +25,4 @@
 		printf("%s[FAILED]%s\n",KRED,KWHT);			\
 		return 1;									\
 	}
+#endif

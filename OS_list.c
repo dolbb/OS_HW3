@@ -88,8 +88,7 @@ void list_destroy(List listHeadL){
 
 //	locks the previous (node) to the node contains key.
 //	return: pointer to previous node after it is locked.
-static Node get_prev_node_to_element(List listHeadL, int key){
-	Node listHead = (Node)listHeadL;
+static Node get_prev_node_to_element(Node listHead, int key){
 	assert(listHead);
 	//TODO: lock listHead.
 	Node prev = listHead; 
@@ -201,11 +200,12 @@ int list_contains(List listHeadL, int key){
 
 int list_size(List listHeadL){
 	Node listHead = (Node)listHeadL;
-	//TODO: lock mutex
 	CHECK_NULL_AND_RETURN_INVALID(listHead)
 
+	//TODO: lock mutex
 	int counter = -1;
 	do{
+		//TODO: LOCK SOMETHING
 		counter++;
 		listHead = listHead->next;
 	}while(listHead);
@@ -214,6 +214,31 @@ int list_size(List listHeadL){
 	return counter;
 }
 
+int compute_node(List listHeadL, int key, void *(*compute_func) (void *), void** result){
+	CHECK_NULL_AND_RETURN_INVALID(listHeadL)
+	CHECK_NULL_AND_RETURN_INVALID(compute_func)
+	CHECK_NULL_AND_RETURN_INVALID(result)
+
+	Node listHead = (Node)listHeadL;
+	Node prev = get_prev_node_to_element(listHead,key);
+	assert (prev != NULL);
+	//if prev is last - element wasnt found.
+	if(!prev->next){
+		//TODO: release prev lock.
+		return 0;
+	}
+	Node curr = prev->next;
+	//TODO: lock curr.
+	//TODO: release prev.
+
+	*result = compute_func(curr->element);
+	//TODO: release curr lock
+	return 1; 
+}
+
+//======================================================
+//				ONLY TO BE USED ON TESTS:
+//======================================================
 Element get_element_from_list(List listHeadL, int key){
 	Node listHead = (Node)listHeadL;
 	CHECK_NULL_AND_RETURN_NULL(listHead)

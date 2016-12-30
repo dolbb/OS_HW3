@@ -1,3 +1,5 @@
+#ifndef OS_LIST_H
+#define OS_LIST_H
 /*================================================
 *					includes
 *===============================================*/
@@ -50,6 +52,14 @@ int list_contains(List listHeadL, int key);
 //	return: -1 otherwise (null pointer).
 int list_size(List listHeadL);
 
-//for tests:
+//this function will compute the given func over the node with the key.
+//changes the result ptr to the computing result.
+//return: 1 - successful
+//return: 0 - element not found
+//return: 1 - error
+int compute_node(List listHeadL, int key, void *(*compute_func) (void *), void** result);
+
+//for tests ONLY:
 Element get_element_from_list(List listHeadL, int key);
 
+#endif

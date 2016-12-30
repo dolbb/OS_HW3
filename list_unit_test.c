@@ -14,8 +14,13 @@
 #define LIST_ELEMENT_EXISTS 1
 #define NO_ELEMENTS_IN_LIST 0
 #define LIST_SUCCESSFUL_UPDATE 1
+#define LIST_SUCCESSFUL_COMPUTE 1
 
-
+void *tmp_compute(void *element){
+	int *n = (int*)malloc(sizeof(int));
+	*n = *(int*)element + 1;
+	return (void*)n;
+}
 
 int test_list_create_and_destroy(){
 	List list1 = list_create();
@@ -190,6 +195,43 @@ int test_list_update(){
 	return 1;
 }
 
+int test_compute_node(){
+	List newList = list_create();
+	
+	int keys[ELEMENT_NUMBER];
+	int numbers[ELEMENT_NUMBER];
+	Element elements[ELEMENT_NUMBER];
+	
+	int num0 = 0;
+	Element element0 = &num0;
+
+	assert(list_update(NULL,0,element0) == LIST_ILLEGAL_PARAM);
+	//insert all elements to list
+	for(int i = 0 ; i<ELEMENT_NUMBER ; ++i){
+		keys[i] = i * AMPLIFIER;
+		numbers[i] = i;
+		elements[i] = &numbers[i];
+		list_insert(newList, keys[i], elements[i]);
+	}
+
+	int* Ptmp = NULL;
+	assert(compute_node(NULL,-1, NULL, NULL) == LIST_ILLEGAL_PARAM);
+	assert(compute_node(NULL, 0, tmp_compute, NULL) == LIST_ILLEGAL_PARAM);
+	assert(compute_node(NULL, 0, tmp_compute, (void**)&Ptmp) == LIST_ILLEGAL_PARAM);
+	assert(compute_node(newList, 0, tmp_compute, NULL) == LIST_ILLEGAL_PARAM);
+	assert(Ptmp == NULL);
+
+	for(int i = 0 ; i<ELEMENT_NUMBER ; ++i){
+		assert(compute_node(newList, keys[i], tmp_compute, (void**)&Ptmp) == LIST_SUCCESSFUL_COMPUTE);		
+		assert(*Ptmp == numbers[i] + 1);
+		assert(get_element_from_list(newList, keys[i]) == elements[i]);
+		free(Ptmp);
+	}
+
+	list_destroy(newList);
+	return 1;
+}
+
 int main(){
 	//tests without thread checks:
 	TEST(test_list_create_and_destroy)
@@ -198,6 +240,7 @@ int main(){
 	TEST(test_list_remove)
 	TEST(test_list_contains)
 	TEST(test_list_update)
+	TEST(test_compute_node)
 	printf("\n%-10s***********All tests have passed***********%s\n",KGRN,KWHT);
 	return 0;
 }
