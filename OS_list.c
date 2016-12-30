@@ -34,7 +34,7 @@ struct node_t{
    struct node_t* next;
    int key;
    Element element;
-   // pthread_mutex_t listMutex;
+   pthread_mutex_t listMutex;
 };
 
 typedef struct node_t *Node;
@@ -53,7 +53,7 @@ Node node_create(int key, Element val){
 
 List list_create(){
 	//allocate:
-	Node newList = malloc(sizeof(struct node_t));
+	Node newList = (Node)malloc(sizeof(struct node_t));
 	CHECK_NULL_AND_RETURN_NULL(newList)
 	
 	//init fields:
@@ -62,22 +62,25 @@ List list_create(){
 	newList->element = NULL;
 
 	//init lock:
-	// pthread_mutexattr_t att;
-	// int pthread_mutexattr_init(&att);
-	// pthread_mutex_init(&(newList->listMutex),&att);
-
+	pthread_mutexattr_t  attr;
+	pthread_mutexattr_init(&attr);
+	pthread_mutexattr_settype(&attr , PTHREAD_MUTEX_ERRORCHECK);
+	pthread_mutex_init(&(newList->listMutex),&attr);
+	pthread_mutexattr_destroy(&attr);
 	return (List)newList;
 }
 
 static void node_destroy(Node node){
+	//mutex inside node MUST be free here
 	if(node){
-		//TODO: delete lock. (release first if needed)
+		pthread_mutex_destroy(&(node->listMutex));
 		free(node);
 	}
 }
 
 void list_destroy(List listHeadL){
 	Node listHead = (Node)listHeadL;
+	//ALL mutexs inside the list MUST be free:
 	Node tmpNode;
 	while (listHead){
 		tmpNode = listHead;
@@ -90,16 +93,20 @@ void list_destroy(List listHeadL){
 //	return: pointer to previous node after it is locked.
 static Node get_prev_node_to_element(Node listHead, int key){
 	assert(listHead);
-	//TODO: lock listHead.
+	//lock listHead:
+	pthread_mutex_lock(&(listHead->listMutex));
 	Node prev = listHead; 
 	Node curr = listHead->next;
 	while(curr){
-		//TODO: lock curr
+		//lock curr:
+		pthread_mutex_lock(&(curr->listMutex));
 		if(curr->key == key){
-			//TODO: unlock curr
+			//unlock curr:
+			pthread_mutex_unlock(&(curr->listMutex));
 			return prev;
 		}
-		//TODO: release prev
+		//unlock prev:
+		pthread_mutex_unlock(&(prev->listMutex));
 		prev = curr;
 		curr = prev->next;
 	}
@@ -115,18 +122,21 @@ int list_insert(List listHeadL, int key, Element val){
 	
 	//if prev is NOT last - the element was found.
 	if(prev->next){
-		//TODO: release prev lock.
+		//unlock prev:
+		pthread_mutex_unlock(&(prev->listMutex));
 		return 0;
 	}
 
 	Node newNode = node_create(key,val);
 	if(!newNode){
-		//TODO: release prev lock.
+		//unlock prev:
+		pthread_mutex_unlock(&(prev->listMutex));
 		return -1;
 	}
 	newNode->next = prev->next;
 	prev->next = newNode;
-	//TODO free prev lock.
+	//unlock prev:
+	pthread_mutex_unlock(&(prev->listMutex));
 	return 1;
 }
 
@@ -139,15 +149,19 @@ int list_update(List listHeadL, int key, Element val){
 	
 	//if prev is last - element wasnt found.
 	if(!prev->next){
-		//TODO: release prev lock.
+		//unlock prev:
+		pthread_mutex_unlock(&(prev->listMutex));
 		return 0;
 	}
 	Node curr = prev->next;
 	assert(curr);
-	//TODO: lock curr.
-	//TODO: release prev.
+	//lock curr:
+	pthread_mutex_lock(&(curr->listMutex));
 	curr->element = val;
-	//TODO: release cuur.
+	//unlock prev:
+	pthread_mutex_unlock(&(prev->listMutex));
+	//unlock curr:
+	pthread_mutex_unlock(&(curr->listMutex));
 	return 1;
 }
 
@@ -156,18 +170,23 @@ int list_remove(List listHeadL, int key){
 	CHECK_NULL_AND_RETURN_INVALID(listHead)
 
 	Node prev = get_prev_node_to_element(listHead,key);
-	assert (prev);
+	assert(prev);
 	
 	//if prev is last - element wasnt found.
 	if(!prev->next){
-		//TODO: release prev lock.
+		//unlock prev:
+		pthread_mutex_unlock(&(prev->listMutex));
 		return 0;
 	}
 	Node curr = prev->next;
 	assert(curr);
-	//TODO: lock curr.
+	//lock curr:
+	pthread_mutex_lock(&(curr->listMutex));
 	prev->next = curr->next;
-	//TODO: release prev.
+	//release prev:
+	pthread_mutex_unlock(&(prev->listMutex));
+	//release curr (wont be reachable here):
+	pthread_mutex_unlock(&(curr->listMutex));
 	node_destroy(curr);
 	return 1;	
 }
@@ -177,40 +196,57 @@ int list_contains(List listHeadL, int key){
 	CHECK_NULL_AND_RETURN_INVALID(listHead)
 
 	Node prev = get_prev_node_to_element(listHead,key);
-	assert (prev);
+	assert(prev);
 
 	//if prev is last - element wasnt found.
 	if(!prev->next){
-		//TODO: release prev lock.
+		//unlock prev:
+		pthread_mutex_unlock(&(prev->listMutex));
 		return 0;
 	}
 
 	Node curr = prev->next;
 	int res = -1;
 	assert(curr);
-	//TODO: lock curr.
-	//TODO: release prev.
+	//lock curr:
+	pthread_mutex_lock(&(curr->listMutex));
 	assert(curr->key == key);
 	if(curr->key == key){
 		res = 1;
 	}
-	//TODO: release curr.
+	//unlock curr:
+	pthread_mutex_unlock(&(curr->listMutex));
+	//unlock prev:
+	pthread_mutex_unlock(&(prev->listMutex));
 	return res;
 }
 
 int list_size(List listHeadL){
 	Node listHead = (Node)listHeadL;
 	CHECK_NULL_AND_RETURN_INVALID(listHead)
+	assert(listHead);
+	//lock listHead:
+	pthread_mutex_lock(&(listHead->listMutex));
 
-	//TODO: lock mutex
-	int counter = -1;
-	do{
-		//TODO: LOCK SOMETHING
-		counter++;
-		listHead = listHead->next;
-	}while(listHead);
+	Node prev = listHead; 
+	Node curr = listHead->next; 
 	
-	//TODO: release lock
+	int counter = 0;
+	while(curr){
+		curr = prev->next;
+		if(curr){
+			//lock curr:
+			pthread_mutex_lock(&(curr->listMutex));
+			//unlock prev:
+			pthread_mutex_unlock(&(prev->listMutex));
+			prev = curr;
+			curr = prev->next;
+		}
+		++counter;
+	}
+
+	//unlock prev:
+	pthread_mutex_unlock(&(prev->listMutex));
 	return counter;
 }
 
@@ -224,15 +260,19 @@ int compute_node(List listHeadL, int key, void *(*compute_func) (void *), void**
 	assert (prev != NULL);
 	//if prev is last - element wasnt found.
 	if(!prev->next){
-		//TODO: release prev lock.
+		//unlock prev:
+		pthread_mutex_unlock(&(prev->listMutex));
 		return 0;
 	}
 	Node curr = prev->next;
-	//TODO: lock curr.
-	//TODO: release prev.
-
+	//lock curr:
+	pthread_mutex_lock(&(curr->listMutex));
+	//unlock prev:
+	pthread_mutex_unlock(&(prev->listMutex));
+	//compute the element and result:
 	*result = compute_func(curr->element);
-	//TODO: release curr lock
+	//unlock curr:
+	pthread_mutex_unlock(&(curr->listMutex));
 	return 1; 
 }
 

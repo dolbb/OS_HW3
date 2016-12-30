@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <assert.h>
 
-#define ELEMENT_NUMBER 10
+#define ELEMENT_NUMBER 900
 #define AMPLIFIER 100
 #define LIST_ILLEGAL_PARAM -1
 #define LIST_SUCCESSFUL_INSERT 1
