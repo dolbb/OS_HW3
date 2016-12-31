@@ -62,11 +62,7 @@ List list_create(){
 	newList->element = NULL;
 
 	//init lock:
-	pthread_mutexattr_t  attr;
-	pthread_mutexattr_init(&attr);
-	pthread_mutexattr_settype(&attr , PTHREAD_MUTEX_ERRORCHECK);
-	pthread_mutex_init(&(newList->listMutex),&attr);
-	pthread_mutexattr_destroy(&attr);
+	pthread_mutex_init(&(newList->listMutex), NULL);
 	return (List)newList;
 }
 
@@ -282,12 +278,9 @@ int compute_node(List listHeadL, int key, void *(*compute_func) (void *), void**
 Element get_element_from_list(List listHeadL, int key){
 	Node listHead = (Node)listHeadL;
 	CHECK_NULL_AND_RETURN_NULL(listHead)
-	Element tmpElement = NULL;
 	listHead = get_prev_node_to_element(listHead,key);
-	if(listHead->next){
-		tmpElement = listHead->next->element;
-	}
 	//unlock listHead:
 	assert(pthread_mutex_unlock(&(listHead->listMutex)) == 0);
-	return tmpElement;
+	CHECK_NULL_AND_RETURN_NULL(listHead->next)
+	return listHead->next->element;
 }

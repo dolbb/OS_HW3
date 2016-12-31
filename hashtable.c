@@ -6,6 +6,7 @@
 #include "stdbool.h"
 #include <pthread.h>
 #include <string.h>
+#include "stdio.h"
 
 struct hashtable_t
 {
@@ -176,12 +177,8 @@ hashtable_t* hash_alloc(int iBuckets, int(*pHash)(int, int))
 	pHashTable->m_uiThreadsCounter = 0;
 	
 	// Initialize stopMutex and counterMutex
-	pthread_mutexattr_t attr;
-	pthread_mutexattr_init(&attr);
-	pthread_mutexattr_settype(&attr , PTHREAD_MUTEX_ERRORCHECK);
-	pthread_mutex_init(&(pHashTable->stopMutex),&attr);
-	pthread_mutex_init(&(pHashTable->counterMutex),&attr);
-	pthread_mutexattr_destroy(&attr);
+	pthread_mutex_init(&(pHashTable->stopMutex),NULL);
+	pthread_mutex_init(&(pHashTable->counterMutex),NULL);
 
 	return pHashTable;
 }
@@ -385,10 +382,10 @@ typedef struct do_hash_op_param_t
 } *do_hash_op_param_ptr;
 
 int AtomicTestCounter(pthread_mutex_t* pCounterMutex, int* pCounter)
-{
+{	
 	// Acquire counter lock
 	assert(pthread_mutex_lock(pCounterMutex) == 0);
-
+	
 	// Read counter
 	int iCounter = *pCounter;
 
@@ -402,7 +399,7 @@ void AtomicAddToCounter(pthread_mutex_t* pCounterMutex, int* pCounter, int delta
 {
 	// Acquire counter lock
 	assert(pthread_mutex_lock(pCounterMutex) == 0);
-
+	
 	// Read counter
 	*pCounter += delta;
 
@@ -414,7 +411,7 @@ void* do_hash_op(void* voidPParam)
 {
 	do_hash_op_param_ptr pParam = (do_hash_op_param_ptr)(voidPParam);
 	int* pResult = NULL;
-
+	
 	// Increase shared counter
 	AtomicAddToCounter(pParam->pCounterMutex, pParam->pCounter, 1);
 	
@@ -446,11 +443,11 @@ void* do_hash_op(void* voidPParam)
 			assert(0);
 	}
 	
-	// Decrease shared counter
-	AtomicAddToCounter(pParam->pCounterMutex, pParam->pCounter, -1);
+	// Increase shared counter
+	AtomicAddToCounter(pParam->pCounterMutex, pParam->pCounter, 1);
 	
 	// Deallocate pParam (allocateed in hash_batch)
-	free(pParam);
+	free(pParam);	
 }
 
 /*
@@ -469,8 +466,13 @@ void hash_batch(hashtable_t* pHashTable, int num_ops, op_t* ops)
 	// Parameters for operations
 	do_hash_op_param_ptr pCurrentParam;
 	pthread_t arrThreads[num_ops];
+	
+	// Shared by all threads
 	pthread_mutex_t counterMutex;
 	int counter = 0;
+	
+	// Initialize counterMutex
+	pthread_mutex_init(&counterMutex,NULL);
 	
 	// Prepare parameters
 	for(int i=0 ; i< num_ops ; ++i)
@@ -483,13 +485,23 @@ void hash_batch(hashtable_t* pHashTable, int num_ops, op_t* ops)
 		pCurrentParam->pHashTable = pHashTable;
 		pCurrentParam->pCounterMutex = &counterMutex;
 		pCurrentParam->pCounter = &counter;
+		
+		int res = pthread_create(arrThreads+i, NULL, do_hash_op, pCurrentParam);
+		if (res != 0)
+			printf("DEBUG ERROR (hashtable.c): pthread_create returned %d\n", res);
 	}
 	
-	// Create threads
-	for(int i=0 ; i< num_ops ; ++i)
-		assert(pthread_create(arrThreads+i, NULL, do_hash_op, pCurrentParam) == 0);
-	
+	printf("\nDEBUG (hashtable.c): executing a batch of %d ops\n", num_ops);
+
+	//assert(pthread_create(arrThreads+i, NULL, do_hash_op, pCurrentParam) == 0);
+		
+	//printf("DEBUG (hashtable.c): Deadlock! :)\n");
 	// Wait for threads to finish
-	while (AtomicTestCounter(&counterMutex, &counter) == 0)
+	while (AtomicTestCounter(&counterMutex, &counter) < (2 * num_ops - 1))
 		sched_yield();
+	
+	printf("DEBUG (hashtable.c): finished executing a batch of %d ops\n", num_ops);
+	
+	// Deallocate lock
+	pthread_mutex_destroy(&counterMutex);
 }
