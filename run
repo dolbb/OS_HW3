@@ -1,0 +1,6 @@
+#!/bin/bash
+
+make
+chmod 700 test parse_log.py
+./test
+./parse_log.py
