@@ -22,6 +22,34 @@ struct hashtable_t
 
 };
 
+typedef struct do_hash_op_param_t
+{
+	op_t* op_data;
+	hashtable_t* pHashTable;
+} *do_hash_op_param_ptr;
+
+#define DO_OP_BUCKET(LIST_OPERATION, BUCKET)						\
+	do {															\
+		int res = AtomicAddOperation(pHashTable);					\
+		if (res == 1)												\
+		{															\
+			if (BUCKET < 0 || BUCKET >= pHashTable->m_iBuckets)		\
+				res = -1;											\
+			else													\
+			{														\
+				List listHead = pHashTable->m_arrLists[BUCKET];		\
+				res = LIST_OPERATION;								\
+			}														\
+			AtomicAddToThreadsCounter(pHashTable, -1);				\
+		}															\
+		return res;													\
+	} while(0)
+
+#define DO_OP(LIST_OPERATION)															\
+	do {																				\
+		DO_OP_BUCKET(LIST_OPERATION, pHashTable->m_pHash(pHashTable->m_iBuckets, key)); \
+	} while(0)
+
 //////////////////////
 //	Atomic Helpers	//
 //////////////////////
@@ -31,14 +59,14 @@ static bool AtomicTestStopped(hashtable_t* pHashTable)
 	bool bStopped = false;
 
 	// Acquire stop lock
-	assert(pthread_mutex_lock(&(pHashTable->stopMutex)) == 0);
+	pthread_mutex_lock(&(pHashTable->stopMutex));
 
 	// Verify if already stopped
 	if (pHashTable->m_bStop)
 		bStopped = true;
 
 	// Release stop lock
-	assert(pthread_mutex_unlock(&(pHashTable->stopMutex)) == 0);
+	pthread_mutex_unlock(&(pHashTable->stopMutex));
 
 	return bStopped;
 }
@@ -49,7 +77,7 @@ static bool AtomicTestAndSetStopped(hashtable_t* pHashTable)
 	bool bAlreadyStopped = false;
 		
 	// Acquire stop lock
-	assert(pthread_mutex_lock(&(pHashTable->stopMutex)) == 0);
+	pthread_mutex_lock(&(pHashTable->stopMutex));
 
 	// Verify if already stopped
 	if (pHashTable->m_bStop)
@@ -58,7 +86,7 @@ static bool AtomicTestAndSetStopped(hashtable_t* pHashTable)
 		pHashTable->m_bStop = true;
 
 	// Release stop lock
-	assert(pthread_mutex_unlock(&(pHashTable->stopMutex)) == 0);
+	pthread_mutex_unlock(&(pHashTable->stopMutex));
 
 	return bAlreadyStopped;
 }
@@ -66,12 +94,12 @@ static bool AtomicTestAndSetStopped(hashtable_t* pHashTable)
 static unsigned int AtomicTestThreadsCounter(hashtable_t* pHashTable)
 {
 	// Acquire counter lock
-	assert(pthread_mutex_lock(&(pHashTable->counterMutex)) == 0);
+	pthread_mutex_lock(&(pHashTable->counterMutex));
 
 	unsigned int uiThreadsCounter = pHashTable->m_uiThreadsCounter;
 
 	// Release counter lock
-	assert(pthread_mutex_unlock(&(pHashTable->counterMutex)) == 0);
+	pthread_mutex_unlock(&(pHashTable->counterMutex));
 
 	return uiThreadsCounter;
 }
@@ -79,14 +107,15 @@ static unsigned int AtomicTestThreadsCounter(hashtable_t* pHashTable)
 static void AtomicAddToThreadsCounter(hashtable_t* pHashTable, int iDelta)
 {
 	// Acquire counter lock
-	assert(pthread_mutex_lock(&(pHashTable->counterMutex)) == 0);
+	pthread_mutex_lock(&(pHashTable->counterMutex));
 
 	// Increase threads counter
 	pHashTable->m_uiThreadsCounter += iDelta;
 
 	// Release counter lock
-	assert(pthread_mutex_unlock(&(pHashTable->counterMutex)) == 0);
+	pthread_mutex_unlock(&(pHashTable->counterMutex));
 }
+
 /*
 Test stop and inc threadsCounter (if possible)
 Returns:	1 if succeeded
@@ -97,7 +126,7 @@ static int AtomicAddOperation(hashtable_t* pHashTable)
 	int iRes = -1;
 
 	// Acquire counter lock
-	assert(pthread_mutex_lock(&(pHashTable->stopMutex)) == 0);
+	pthread_mutex_lock(&(pHashTable->stopMutex));
 
 	// Verify hash table didn't stop
 	if (pHashTable->m_bStop == false)
@@ -110,7 +139,7 @@ static int AtomicAddOperation(hashtable_t* pHashTable)
 	}
 
 	// Release stop lock
-	assert(pthread_mutex_unlock(&(pHashTable->stopMutex)) == 0);
+	pthread_mutex_unlock(&(pHashTable->stopMutex));
 
 	return iRes;
 }
@@ -221,7 +250,6 @@ Returns:	1: The table was freed
 int hash_free(hashtable_t* pHashTable)
 {
 	// Assuming hash_free will be called once (according to "free after free" in piazza)
-
 	int iRes = 1;
 
 	// Verify input
@@ -250,34 +278,8 @@ int hash_free(hashtable_t* pHashTable)
 		free(pHashTable);
 	}
 	
-	
-
 	return iRes;
 }
-
-
-#define DO_OP_BUCKET(LIST_OPERATION, BUCKET)						\
-	do {															\
-		int res = AtomicAddOperation(pHashTable);					\
-		if (res == 1)												\
-		{															\
-			if (BUCKET < 0 || BUCKET >= pHashTable->m_iBuckets)		\
-				res = -1;											\
-			else													\
-			{														\
-				List listHead = pHashTable->m_arrLists[BUCKET];		\
-				res = LIST_OPERATION;								\
-			}														\
-			AtomicAddToThreadsCounter(pHashTable, -1);				\
-		}															\
-		return res;													\
-	} while(0)
-
-#define DO_OP(LIST_OPERATION)															\
-	do {																				\
-		DO_OP_BUCKET(LIST_OPERATION, pHashTable->m_pHash(pHashTable->m_iBuckets, key)); \
-	} while(0)
-
 
 /*
 This function inserts a single element with the value val into the hash table at key. Note that if
@@ -373,81 +375,41 @@ int list_node_compute(hashtable_t* pHashTable, int key, void *(*compute_func) (v
 	DO_OP(compute_node(listHead, key, compute_func, result));
 }
 
-typedef struct do_hash_op_param_t
-{
-	op_t op_data;
-	hashtable_t* pHashTable;
-	pthread_mutex_t* pCounterMutex;
-	int* pCounter;
-} *do_hash_op_param_ptr;
-
-int AtomicTestCounter(pthread_mutex_t* pCounterMutex, int* pCounter)
-{	
-	// Acquire counter lock
-	assert(pthread_mutex_lock(pCounterMutex) == 0);
-	
-	// Read counter
-	int iCounter = *pCounter;
-
-	// Release counter lock
-	assert(pthread_mutex_unlock(pCounterMutex) == 0);
-
-	return iCounter;
-}
-
-void AtomicAddToCounter(pthread_mutex_t* pCounterMutex, int* pCounter, int delta)
-{
-	// Acquire counter lock
-	assert(pthread_mutex_lock(pCounterMutex) == 0);
-	
-	// Read counter
-	*pCounter += delta;
-
-	// Release counter lock
-	assert(pthread_mutex_unlock(pCounterMutex) == 0);
-}
-
 void* do_hash_op(void* voidPParam)
 {
 	do_hash_op_param_ptr pParam = (do_hash_op_param_ptr)(voidPParam);
-	int* pResult = NULL;
 	
-	// Increase shared counter
-	AtomicAddToCounter(pParam->pCounterMutex, pParam->pCounter, 1);
-	
-	switch(pParam->op_data.op)
+	switch(pParam->op_data->op)
 	{
 		case INSERT:
-			hash_insert(pParam->pHashTable, pParam->op_data.key, pParam->op_data.val);
+			pParam->op_data->result = hash_insert(pParam->pHashTable, pParam->op_data->key, pParam->op_data->val);
 			break;
 		
 		case REMOVE:
-			hash_remove(pParam->pHashTable, pParam->op_data.key);
+			pParam->op_data->result = hash_remove(pParam->pHashTable, pParam->op_data->key);
 			break;
 			
 		case CONTAINS:
-			hash_contains(pParam->pHashTable, pParam->op_data.key);
+			pParam->op_data->result = hash_contains(pParam->pHashTable, pParam->op_data->key);
 			break;
 			
 		case UPDATE:
-			hash_update(pParam->pHashTable, pParam->op_data.key, pParam->op_data.val);
+			pParam->op_data->result = hash_update(pParam->pHashTable, pParam->op_data->key, pParam->op_data->val);
 			break;
 			
 		case COMPUTE:
-			pResult = &(pParam->op_data.result);
-			list_node_compute(pParam->pHashTable, pParam->op_data.key, pParam->op_data.compute_func, (void**)(&pResult));
-			pParam->op_data.result = *pResult;
+			pParam->op_data->result = list_node_compute(pParam->pHashTable, pParam->op_data->key, pParam->op_data->compute_func, (void**)(&(pParam->op_data->val)));
 			break;
 		
 		default:
-			assert(0);
+			// Ignores current operation
+			break;
 	}
-	
-	// Increase shared counter
-	AtomicAddToCounter(pParam->pCounterMutex, pParam->pCounter, 1);
 	
 	// Deallocate pParam (allocateed in hash_batch)
 	free(pParam);	
+	pthread_exit(NULL);
+	return NULL;
 }
 
 /*
@@ -460,19 +422,12 @@ a single-element operation.
 void hash_batch(hashtable_t* pHashTable, int num_ops, op_t* ops)
 {
 	// Verify input
-	if (!pHashTable || num_ops<0 || !ops)
+	if (!pHashTable || num_ops<=0 || !ops)
 		return;
 	
 	// Parameters for operations
 	do_hash_op_param_ptr pCurrentParam;
 	pthread_t arrThreads[num_ops];
-	
-	// Shared by all threads
-	pthread_mutex_t counterMutex;
-	int counter = 0;
-	
-	// Initialize counterMutex
-	pthread_mutex_init(&counterMutex,NULL);
 	
 	// Prepare parameters
 	for(int i=0 ; i< num_ops ; ++i)
@@ -480,28 +435,19 @@ void hash_batch(hashtable_t* pHashTable, int num_ops, op_t* ops)
 		// Allocate current param
 		pCurrentParam = (do_hash_op_param_ptr)malloc(sizeof(*pCurrentParam)); // Deallocated in do_hash_op
 		
-		// Assign current param values
-		memcpy(&(pCurrentParam->op_data), ops+i, sizeof(*ops));
-		pCurrentParam->pHashTable = pHashTable;
-		pCurrentParam->pCounterMutex = &counterMutex;
-		pCurrentParam->pCounter = &counter;
+		// Verify allocation succeeded
+		if(!pCurrentParam)
+			continue;
 		
-		int res = pthread_create(arrThreads+i, NULL, do_hash_op, pCurrentParam);
-		if (res != 0)
-			printf("DEBUG ERROR (hashtable.c): pthread_create returned %d\n", res);
+		// Assign current param values
+		pCurrentParam->op_data = ops+i;
+		pCurrentParam->pHashTable = pHashTable;
+		
+		// Start current operation on a new thread
+		pthread_create(arrThreads+i, NULL, do_hash_op, pCurrentParam);
 	}
 	
-	printf("\nDEBUG (hashtable.c): executing a batch of %d ops\n", num_ops);
-
-	//assert(pthread_create(arrThreads+i, NULL, do_hash_op, pCurrentParam) == 0);
-		
-	//printf("DEBUG (hashtable.c): Deadlock! :)\n");
 	// Wait for threads to finish
-	while (AtomicTestCounter(&counterMutex, &counter) < (2 * num_ops - 1))
-		sched_yield();
-	
-	printf("DEBUG (hashtable.c): finished executing a batch of %d ops\n", num_ops);
-	
-	// Deallocate lock
-	pthread_mutex_destroy(&counterMutex);
+	for (int i=0 ; i<num_ops ; ++i)
+		pthread_join(arrThreads[i], NULL);
 }
